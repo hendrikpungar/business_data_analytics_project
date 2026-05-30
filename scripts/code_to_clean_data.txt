@@ -1,0 +1,63 @@
+
+import pandas as pd
+
+def convert_julian_date(x):
+    """
+    Converts dates in YYYYDDD format to normal YYYY-MM-DD format.
+    Example:
+        2012092 -> 2012-04-01
+        2003172 -> 2003-06-21
+    """
+    if pd.isna(x):
+        return pd.NaT
+
+    x = str(int(float(x))).strip()
+
+    if len(x) != 7:
+        return pd.NaT
+
+    year = x[:4]
+    day_of_year = x[4:]
+
+    return pd.to_datetime(year + day_of_year, format="%Y%j", errors="coerce")
+
+########################
+
+# Load data
+df = pd.read_csv("data.csv", encoding="latin1")
+
+# Make all column names lower case
+df.columns = df.columns.str.lower().str.strip()
+
+# Date columns to convert
+date_cols = [
+    "posting_date",
+    "txn_date",
+    "date_opened",
+    "alt_block_code_date",
+    "block_code_date"
+]
+
+# Convert only columns that exist in the dataset
+for col in date_cols:
+    if col in df.columns:
+        df[col] = df[col].apply(convert_julian_date)
+
+# Optional: create readable string format instead of datetime
+for col in date_cols:
+    if col in df.columns:
+        df[col + "_normal"] = df[col].dt.strftime("%Y-%m-%d")
+
+# Save cleaned version
+df.to_csv("cleaned_credit_card_data.csv", index=False)
+
+##########################
+
+#poscode handling
+# 2  numbers
+df["postcode_prefix2"] = df["customer_postcode"].str[:2]
+# 3 numbers
+# df["postcode_prefix3"] = df["customer_postcode"].str[:3] 
+
+# 1-hote enconding
+df = pd.get_dummies(df, columns=["postcode_prefix2"], drop_first=True)

@@ -1,0 +1,294 @@
+Project description
+Completion requirements
+Project Description
+For this project, you will work with a large credit card customer transaction dataset of approximately 100,000 records and about 1000 clients. The main goal is to transform raw financial and transactional data into useful business insights that can support decision-making in a banking or financial services context.
+
+The project should not focus only on building machine learning models. The emphasis should be on understanding customers, identifying business opportunities, detecting risk, and making practical recommendations for customer management, marketing, and profitability.
+
+you  will use the dataset to analyse customer behaviour, segment customers, predict customer value, estimate churn or inactivity risk, and produce a short forecast of future spending or balance behaviour.
+
+Inroduction
+Banks and financial institutions need to understand how customers use their credit cards, which customers are most valuable, which customers may stop using the product, and which customer groups require different marketing or risk strategies.
+
+Using the available customer, account, and transaction data, students will develop a business analytics project that answers questions such as:
+
+Which customers are the most valuable?
+
+Which customers are at risk of churn or inactivity?
+
+What types of customers spend more?
+
+How can customers be grouped into meaningful business segments?
+
+Can we estimate future customer value?
+
+Can we forecast future spending trends?
+
+What actions should the business take based on the analysis?
+
+Main Objectives
+The project should address four main business analytics areas:
+
+1. Customer Segmentation
+Students should group customers into meaningful segments based on their financial and behavioural characteristics.
+
+Possible segmentation variables include:
+
+Credit limit
+Month-end balance
+Transaction amount
+Monthly payment
+Age
+Card type
+Total number of cards
+Merchant groups
+Transaction frequency
+Average transaction amount
+Credit utilisation ratio
+Possible customer segments:
+
+Segment	Description
+High-value customers	High spending, high credit limit, regular payments
+Low-activity customers	Few transactions, low spending
+Revolvers	High month-end balance, low payment ratio
+Transactors	Frequent spending, balance paid regularly
+Risk-sensitive customers	High utilisation, irregular payments
+Category-focused customers	Strong spending in petrol, grocery, retail, or travel
+The purpose of segmentation is to help the business design better strategies for different types of customers.
+
+Example business actions:
+
+Reward high-value customers
+Re-engage low-activity customers
+Offer instalment products to heavy spenders
+Monitor high-utilisation customers
+Create merchant-specific promotions
+2. Regression: Predicting Customer Value or Financial Behaviour
+Build a regression model to predict a continuous business outcome.
+
+Recommended regression target:
+
+Customer Lifetime Value estimate
+Estimated the CLTV variable.
+
+Estimated CLTV = total customer spending × assumed revenue rate
+Regression models may include:
+
+Linear Regression
+Random Forest Regressor
+Gradient Boosting Regressor
+Business use:
+
+The bank can estimate which customers are likely to generate higher value and prioritise them for loyalty programmes, personalised offers, or premium card upgrades.
+
+3. Classification: Predicting Churn or Inactivity Risk
+Students should create a classification model to identify customers who may be at risk of churn, inactivity, or account problems.
+
+Since the dataset may not have a direct CHURN column, students can create a business-defined churn proxy.
+
+Possible churn definitions:
+
+Customer has very low or no recent transaction activity
+Customer has inactive or blocked card status
+Customer has no spending in the latest observed period
+Customer shows a sharp decline in spending compared with previous months
+Example binary target:
+
+Churn_Risk = 1 if customer has no transactions in the most recent month
+Churn_Risk = 0 otherwise
+Classification models may include:
+
+Logistic Regression
+Random Forest
+Important classification metrics:
+
+Accuracy
+Precision
+Recall
+F1-score
+ROC-AUC
+Confusion Matrix
+For churn, recall is especially important because the business wants to identify as many at-risk customers as possible before they leave.
+
+Business use:
+
+The bank can use churn prediction to launch retention campaigns, offer rewards, reduce inactivity, and protect future revenue.
+
+4. Forecasting: Short-Term Spending or Balance Trends
+include a small forecasting component to estimate future customer or portfolio behaviour.
+
+Forecast Monthly Total Spending
+Aggregate transactions by month:
+
+Month → Total AMOUNT
+They can also forecast by merchant group:
+
+Month + Merchant Group → Total Spending
+Possible forecasting methods:
+
+Moving average
+ARIMA
+Regression with lag variables
+Business use:
+
+Forecasting helps the bank anticipate future card usage, plan marketing campaigns, estimate transaction revenue, and identify seasonal changes in customer spending.
+
+
+
+Analytical Workflow
+Step 1: Data Understanding
+Begin by understanding the dataset structure:
+
+Customer information
+Card information
+Transaction records
+Merchant information
+Balance and payment data
+Status and block information
+Date variables
+ identify:
+
+Number of customers
+Number of transactions
+Time period covered
+Missing values
+Duplicate records
+Outliers
+Main transaction categories
+Step 2: Data Cleaning
+clean the data before modelling.
+
+Typical tasks:
+
+Remove empty columns
+Handle missing values
+Convert date columns
+Correct data types
+Remove impossible values
+Treat outliers
+Standardise categorical variables
+Special attention should be given to date fields such as:
+
+TXN_DATE
+POSTING_DATE
+DATE_OPENED
+These may need conversion from a YYYYDDD format into proper calendar dates.
+
+Step 3: Feature Engineering
+create business-relevant variables, not only technical ones.
+
+Useful engineered features:
+
+Account age
+Transaction frequency
+Total customer spending
+Average transaction amount
+Maximum transaction amount
+Number of merchant groups used
+Number of countries used
+Recent activity level
+Spending growth or decline
+Examples:
+
+Credit Utilisation = Month-End Balance / Credit Limit
+Payment Ratio = Monthly Payment / Month-End Balance
+Average Transaction Value = Total Spending / Number of Transactions
+These features should help explain customer value, risk, churn, and behaviour.
+
+ Business Questions
+You should answer questions such as:
+
+What are the main types of credit card customers?
+
+Which customers are most valuable to the business?
+
+Which customers are at risk of churn or inactivity?
+
+What factors predict higher spending or higher month-end balance?
+
+Which merchant categories generate the most value?
+
+How does customer behaviour differ by age group, card type, or relationship type?
+
+Can future monthly spending be forecasted with reasonable accuracy?
+
+What business actions should be taken for each customer segment?
+
+Expected Models
+Task	Method	Business Purpose
+Segmentation	K-Means 	Group customers into business segments
+Regression	 random forest or gradient boosting	Predict CLTV, spending, balance, or payment
+Classification	Logistic regression or random forest	Predict churn or inactivity risk
+Forecasting	Moving average, ARIMA, or lag-based regression	Forecast future spending trends
+Deliverables
+Submit:
+
+Business analytics report
+
+Cleaned and prepared dataset
+
+Python notebook or scripts
+
+Exploratory data analysis
+
+Customer segmentation analysis
+
+Regression model for CLTV or financial value
+
+Classification model for churn or inactivity
+
+Short forecasting analysis
+
+Business recommendations
+
+Recommended Report Structure
+1. Introduction
+Explain the business problem and why customer analytics is important in banking.
+
+2. Dataset Description
+Describe the dataset, variables, data quality issues, and assumptions.
+
+3. Exploratory Business Analysis
+Show key patterns in customer behaviour, spending, balances, payments, and merchant categories.
+
+4. Customer Segmentation
+Present the customer segments, describe each segment, and explain its business value.
+
+5. Regression Model
+Build a model to predict CLTV, spending, monthly payment, or month-end balance.
+
+6. Classification Model
+Build a churn or inactivity prediction model.
+
+7. Forecasting
+Forecast monthly spending or balance trends.
+
+8. Business Recommendations
+Translate results into practical business actions.
+
+9. Limitations
+Discuss data quality, assumptions, modelling limitations, and ethical issues.
+
+10. Conclusion
+Summarise the most important findings and recommendations.
+
+Business Emphasis
+The final project should clearly connect analytics results to business decisions.
+
+Examples of good business recommendations:
+
+Target high-value customers with premium card offers.
+Send retention campaigns to customers with high churn probability.
+Offer instalment plans to customers with high spending and high balances.
+Create grocery or petrol cashback offers for category-focused customers.
+Monitor customers with very high credit utilisation.
+Develop reactivation campaigns for low-activity customers.
+Use spending forecasts to plan monthly marketing campaigns.
+Project Aim
+The aim of this project is to show how business analytics can help a financial institution understand its credit card customers, predict customer value, identify churn risk, forecast future spending, and design better customer management strategies.
+
+The strongest projects will not only report model accuracy. They will explain what the results mean for the business and how the bank should act based on the analysis.
+
+NOTE: to read data use  data = pd.read_csv("data.csv", encoding="latin1")
+
+DONT submit the data. Just notebook and PDF with the report
