@@ -1,0 +1,30 @@
+{
+  "best_model": "logistic_regression",
+  "positive_rate": 0.18473895582329317,
+  "n_train": 796,
+  "n_test": 200,
+  "by_model": {
+    "logistic_regression": {
+      "recall": 0.8918918918918919,
+      "precision": 0.3333333333333333,
+      "f1": 0.4852941176470588,
+      "roc_auc": 0.7895871331454154
+    },
+    "random_forest": {
+      "recall": 0.35135135135135137,
+      "precision": 0.7222222222222222,
+      "f1": 0.4727272727272727,
+      "roc_auc": 0.8028519316862875
+    }
+  },
+  "confusion_matrix": [
+    [
+      97,
+      66
+    ],
+    [
+      4,
+      33
+    ]
+  ]
+}

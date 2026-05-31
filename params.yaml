@@ -1,0 +1,92 @@
+# Single source of truth for pipeline parameters.
+# Edit here, then `dvc repro` re-runs only the stages whose params changed.
+
+data:
+  encoding: latin1
+  customer_id: customer_id_mask          # column identifying a client
+  amount_col: amount                     # transaction amount
+  drop_duplicates: true                  # drop byte-identical rows (export artifacts)
+  date_columns:                          # Julian YYYYDDD -> calendar date
+    - posting_date
+    - txn_date
+    - date_opened
+  max_age: 120                           # drop customers older than this age (years)
+
+features:
+  # Churn proxy: a customer is "at risk" if they have no transactions in the
+  # most recent `recent_activity_months` months of the dataset's time span.
+  recent_activity_months: 1
+
+segmentation:
+  random_state: 42
+  pca_components: 2
+  k_min: 2          # search K-Means over k in [k_min, k_max] inclusive
+  k_max: 8
+  winsor_quantiles: [0.01, 0.99]   # clip each feature to these quantiles before de-skew
+  features:         # customer-level features fed to the clustering pipeline
+    - credit_limit
+    - month_end_bal
+    - total_spend
+    - txn_count
+    - avg_txn_amount
+    - credit_utilisation
+    - payment_ratio
+    - account_age_days
+    - n_merchant_groups
+
+regression:
+  # CLTV = total_spend * revenue_rate. Spend-arithmetic features are EXCLUDED
+  # (they reconstruct the target) — value is predicted from account/engagement
+  # attributes. revenue_rate is a business assumption (2% revenue on spend).
+  random_state: 42
+  test_size: 0.2
+  revenue_rate: 0.02
+  categorical:
+    - relationship
+  features:
+    - credit_limit
+    - month_end_bal
+    - monthly_payment
+    - age
+    - total_cards
+    - credit_utilisation
+    - payment_ratio
+    - account_age_days
+    - n_merchant_groups
+    - n_countries
+    - recency_days
+    - relationship
+
+classification:
+  # Target churn_risk (no txn in the most recent month). recency_days /
+  # last_txn_date are EXCLUDED (they define the label). Recall is the priority.
+  random_state: 42
+  test_size: 0.2
+  target: churn_risk
+  categorical:
+    - relationship
+  features:
+    - credit_limit
+    - month_end_bal
+    - monthly_payment
+    - age
+    - total_cards
+    - total_spend
+    - txn_count
+    - avg_txn_amount
+    - max_txn_amount
+    - n_merchant_groups
+    - n_countries
+    - credit_utilisation
+    - payment_ratio
+    - account_age_days
+    - relationship
+
+forecasting:
+  # Monthly total card spend. Partial end-months trimmed; last test_months held
+  # out to compare moving-average vs ARIMA; winner forecasts `horizon` ahead.
+  min_month_share: 0.6      # drop leading/trailing months below 60% of median txn count (cuts partial 2014-03)
+  ma_window: 3
+  test_months: 3
+  horizon: 3
+  arima_order: [1, 1, 1]

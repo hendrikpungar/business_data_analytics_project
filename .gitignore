@@ -21,6 +21,7 @@ __pycache__/
 .vscode/
 .idea/
 *.swp
+CLAUDE.md
 
 # Secrets / env files
 .env
@@ -32,3 +33,8 @@ Thumbs.db
 
 # Logs
 *.log
+
+deliverables/
+
+# MLflow local experiment store (regenerable; runs are recreated by `dvc repro`)
+mlruns/

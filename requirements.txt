@@ -10,3 +10,7 @@ statsmodels
 xgboost
 shap
 openpyxl
+dvc
+mlflow
+pyarrow
+markdown

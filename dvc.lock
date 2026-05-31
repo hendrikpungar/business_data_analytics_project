@@ -1,0 +1,244 @@
+schema: '2.0'
+stages:
+  clean:
+    cmd: python -m src.data.clean
+    deps:
+    - path: data/data.csv
+      hash: md5
+      md5: 92bbb466ef6b80490e71fdac3b58cb34
+      size: 20180108
+    - path: src/data/clean.py
+      hash: md5
+      md5: d6b1ae9dafc3f070655781be380eba5b
+      size: 2434
+    params:
+      params.yaml:
+        data:
+          encoding: latin1
+          customer_id: customer_id_mask
+          amount_col: amount
+          drop_duplicates: true
+          date_columns:
+          - posting_date
+          - txn_date
+          - date_opened
+          max_age: 120
+    outs:
+    - path: data/interim/cleaned.parquet
+      hash: md5
+      md5: 909539d2d591e747f088f642b65c59ce
+      size: 3525642
+  features:
+    cmd: python -m src.data.features
+    deps:
+    - path: data/interim/cleaned.parquet
+      hash: md5
+      md5: 909539d2d591e747f088f642b65c59ce
+      size: 3525642
+    - path: src/data/features.py
+      hash: md5
+      md5: 6ff33bdccadc7afbf9d1781895d60a14
+      size: 3061
+    params:
+      params.yaml:
+        data:
+          encoding: latin1
+          customer_id: customer_id_mask
+          amount_col: amount
+          drop_duplicates: true
+          date_columns:
+          - posting_date
+          - txn_date
+          - date_opened
+          max_age: 120
+        features:
+          recent_activity_months: 1
+    outs:
+    - path: data/processed/customer_features.parquet
+      hash: md5
+      md5: 6185b70cb14f2d9c31684855e443fd6e
+      size: 93933
+  train_segmentation:
+    cmd: python -m src.models.train_segmentation
+    deps:
+    - path: data/processed/customer_features.parquet
+      hash: md5
+      md5: 6185b70cb14f2d9c31684855e443fd6e
+      size: 93933
+    - path: src/models/train_segmentation.py
+      hash: md5
+      md5: bb98b17c5666e87a7ea36034bf805274
+      size: 4853
+    - path: src/tracking.py
+      hash: md5
+      md5: 9dbd94d33fb08f48b65e176f7ae8c6b3
+      size: 1069
+    params:
+      params.yaml:
+        segmentation:
+          random_state: 42
+          pca_components: 2
+          k_min: 2
+          k_max: 8
+          winsor_quantiles:
+          - 0.01
+          - 0.99
+          features:
+          - credit_limit
+          - month_end_bal
+          - total_spend
+          - txn_count
+          - avg_txn_amount
+          - credit_utilisation
+          - payment_ratio
+          - account_age_days
+          - n_merchant_groups
+    outs:
+    - path: data/processed/customer_segments.parquet
+      hash: md5
+      md5: c59ad428c05a4311395972d59d10a6a7
+      size: 94846
+    - path: metrics/segmentation.json
+      hash: md5
+      md5: 1563b1eacf2c5552721266c502732abb
+      size: 300
+    - path: models/segmentation_kmeans.joblib
+      hash: md5
+      md5: d0420cfff37cd8e99ccadbdb3ad186a3
+      size: 7378
+  train_regression:
+    cmd: python -m src.models.train_regression
+    deps:
+    - path: data/processed/customer_features.parquet
+      hash: md5
+      md5: 6185b70cb14f2d9c31684855e443fd6e
+      size: 93933
+    - path: src/models/train_regression.py
+      hash: md5
+      md5: 0148181eb5e4d1d06b05f01025d5c2ba
+      size: 4597
+    - path: src/tracking.py
+      hash: md5
+      md5: 9dbd94d33fb08f48b65e176f7ae8c6b3
+      size: 1069
+    params:
+      params.yaml:
+        regression:
+          random_state: 42
+          test_size: 0.2
+          revenue_rate: 0.02
+          categorical:
+          - relationship
+          features:
+          - credit_limit
+          - month_end_bal
+          - monthly_payment
+          - age
+          - total_cards
+          - credit_utilisation
+          - payment_ratio
+          - account_age_days
+          - n_merchant_groups
+          - n_countries
+          - recency_days
+          - relationship
+    outs:
+    - path: data/processed/cltv_predictions.parquet
+      hash: md5
+      md5: 4d31b6fe8f8bbf8d2842c1aa56980518
+      size: 5423
+    - path: metrics/regression.json
+      hash: md5
+      md5: 4c5508c470d0e95dd3e9eefe77e9dc1f
+      size: 518
+    - path: models/regression_cltv.joblib
+      hash: md5
+      md5: 2aea88282e03e08696ac90ce337eac7f
+      size: 135517
+  train_classification:
+    cmd: python -m src.models.train_classification
+    deps:
+    - path: data/processed/customer_features.parquet
+      hash: md5
+      md5: 6185b70cb14f2d9c31684855e443fd6e
+      size: 93933
+    - path: src/models/train_classification.py
+      hash: md5
+      md5: 10360b5cd70466a518c657ec6582f82c
+      size: 5136
+    - path: src/tracking.py
+      hash: md5
+      md5: 9dbd94d33fb08f48b65e176f7ae8c6b3
+      size: 1069
+    params:
+      params.yaml:
+        classification:
+          random_state: 42
+          test_size: 0.2
+          target: churn_risk
+          categorical:
+          - relationship
+          features:
+          - credit_limit
+          - month_end_bal
+          - monthly_payment
+          - age
+          - total_cards
+          - total_spend
+          - txn_count
+          - avg_txn_amount
+          - max_txn_amount
+          - n_merchant_groups
+          - n_countries
+          - credit_utilisation
+          - payment_ratio
+          - account_age_days
+          - relationship
+    outs:
+    - path: data/processed/churn_predictions.parquet
+      hash: md5
+      md5: 294c7d960be28c5b13f9dbc257dfdb2a
+      size: 3698
+    - path: metrics/classification.json
+      hash: md5
+      md5: c61bed05188aa9a713644d4697462600
+      size: 609
+    - path: models/classification_churn.joblib
+      hash: md5
+      md5: 9db320a4fc71c324bb07e60d7a7e660e
+      size: 5146
+  train_forecasting:
+    cmd: python -m src.models.train_forecasting
+    deps:
+    - path: data/interim/cleaned.parquet
+      hash: md5
+      md5: 909539d2d591e747f088f642b65c59ce
+      size: 3525642
+    - path: src/models/train_forecasting.py
+      hash: md5
+      md5: ab8535fb1752b37e411df8c5a3d82012
+      size: 4402
+    - path: src/tracking.py
+      hash: md5
+      md5: 9dbd94d33fb08f48b65e176f7ae8c6b3
+      size: 1069
+    params:
+      params.yaml:
+        forecasting:
+          min_month_share: 0.6
+          ma_window: 3
+          test_months: 3
+          horizon: 3
+          arima_order:
+          - 1
+          - 1
+          - 1
+    outs:
+    - path: data/processed/spend_forecast.parquet
+      hash: md5
+      md5: 2615362070e7bfb8b797037d1d59c3e7
+      size: 2704
+    - path: metrics/forecasting.json
+      hash: md5
+      md5: c95109b0e362a99cd3605124d2d681f0
+      size: 467

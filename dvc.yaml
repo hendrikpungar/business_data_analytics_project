@@ -1,0 +1,82 @@
+# DVC pipeline. Re-run with `dvc repro`; only stages whose deps/params
+# changed are re-executed. `dvc dag` shows the stage graph.
+stages:
+  clean:
+    cmd: python -m src.data.clean
+    deps:
+      - src/data/clean.py
+      - data/data.csv
+    params:
+      - data
+    outs:
+      - data/interim/cleaned.parquet
+
+  features:
+    cmd: python -m src.data.features
+    deps:
+      - src/data/features.py
+      - data/interim/cleaned.parquet
+    params:
+      - data
+      - features
+    outs:
+      - data/processed/customer_features.parquet
+
+  train_segmentation:
+    cmd: python -m src.models.train_segmentation
+    deps:
+      - src/models/train_segmentation.py
+      - src/tracking.py
+      - data/processed/customer_features.parquet
+    params:
+      - segmentation
+    outs:
+      - data/processed/customer_segments.parquet
+      - models/segmentation_kmeans.joblib
+    metrics:
+      - metrics/segmentation.json:
+          cache: false
+
+  train_regression:
+    cmd: python -m src.models.train_regression
+    deps:
+      - src/models/train_regression.py
+      - src/tracking.py
+      - data/processed/customer_features.parquet
+    params:
+      - regression
+    outs:
+      - data/processed/cltv_predictions.parquet
+      - models/regression_cltv.joblib
+    metrics:
+      - metrics/regression.json:
+          cache: false
+
+  train_classification:
+    cmd: python -m src.models.train_classification
+    deps:
+      - src/models/train_classification.py
+      - src/tracking.py
+      - data/processed/customer_features.parquet
+    params:
+      - classification
+    outs:
+      - data/processed/churn_predictions.parquet
+      - models/classification_churn.joblib
+    metrics:
+      - metrics/classification.json:
+          cache: false
+
+  train_forecasting:
+    cmd: python -m src.models.train_forecasting
+    deps:
+      - src/models/train_forecasting.py
+      - src/tracking.py
+      - data/interim/cleaned.parquet
+    params:
+      - forecasting
+    outs:
+      - data/processed/spend_forecast.parquet
+    metrics:
+      - metrics/forecasting.json:
+          cache: false

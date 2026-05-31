@@ -1,0 +1,5 @@
+/customer_features.parquet
+/customer_segments.parquet
+/cltv_predictions.parquet
+/churn_predictions.parquet
+/spend_forecast.parquet

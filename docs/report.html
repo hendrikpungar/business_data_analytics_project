@@ -1,0 +1,590 @@
+<!DOCTYPE html><html><head><meta charset='utf-8'><title>Credit-Card Customer Analytics — Report</title><style>
+@page { size: A4; margin: 18mm; }
+body { font-family: -apple-system, Segoe UI, Helvetica, Arial, sans-serif;
+       max-width: 850px; margin: 24px auto; padding: 0 16px; line-height: 1.5;
+       color: #1a1a1a; font-size: 15px; }
+h1 { font-size: 26px; color: #08306b; margin-bottom: 4px; }
+h2 { font-size: 19px; color: #08519c; border-bottom: 2px solid #c6dbef;
+     padding-bottom: 4px; margin-top: 30px; }
+h3 { font-size: 15.5px; color: #2171b5; margin-top: 20px; }
+p, li { text-align: justify; }
+table { border-collapse: collapse; width: 100%; margin: 12px 0; font-size: 13px; }
+th { background: #08519c; color: #fff; padding: 6px 9px; text-align: left; }
+td { border-bottom: 1px solid #e0e0e0; padding: 5px 9px; }
+tr:nth-child(even) td { background: #f5f8fc; }
+img { max-width: 78%; display: block; margin: 14px auto; }
+blockquote { color: #555; border-left: 3px solid #c6dbef; padding-left: 12px;
+             font-style: italic; background: #fafcff; }
+code { background: #f0f0f0; padding: 1px 4px; border-radius: 3px; }
+hr { border: none; border-top: 1px solid #ddd; margin: 24px 0; }
+h2 { page-break-after: avoid; } img { page-break-inside: avoid; }
+</style></head><body><h1>Turning Credit-Card Transactions into Customer Strategy</h1>
+<p><strong>A Business Analytics Report for a Retail Card Portfolio</strong></p>
+<p><em>Business Data Analytics · University of Tartu</em></p>
+<blockquote>
+<p><em>Author's note.</em> This report and the project behind it are my own work: the
+design and architecture, the analytical and modelling choices, and the final
+review are all mine. I used Claude Code (Opus 4.7) as a coding and drafting
+assistant to speed up implementation and writing, and I checked and validated
+every result myself. The decision to layer DVC and MLflow on top of the
+analysis comes from the <em>MLOps</em> course, where I learned to apply
+production-grade practices to machine-learning projects.</p>
+</blockquote>
+<hr />
+<h3>Executive summary</h3>
+<p>I analysed two years of credit-card activity, covering 155 228 transactions
+across 996 customers, to answer the questions a card business actually cares
+about: who is valuable, who is about to leave, and where spending is heading.
+Three findings drive everything that follows.</p>
+<p>First, value is extraordinarily concentrated: just 23% of customers generate 71%
+of all spending. Second, the customers who <em>spend</em> and the customers who <em>pay
+interest</em> are largely different people, which means a single retention or
+marketing playbook will misfire. I therefore identify six distinct segments, each
+needing its own treatment. Third, churn here means going quiet: the customers
+slipping away are the low-frequency, low-engagement accounts, and a simple model
+catches 89% of them in time to act.</p>
+<p>Taken together, the analysis points to one organising principle: manage the
+portfolio by value at risk, not by headcount. The remainder of this report builds
+the evidence and translates it into specific actions.</p>
+<blockquote>
+<p><em>A note on units.</em> The source data does not label its currency, so every amount
+in this report is expressed in euros,
+abbreviated EUR. This is recorded as an assumption (section 9).</p>
+</blockquote>
+<hr />
+<h2>1. Introduction</h2>
+<p>A credit-card book makes money in two very different ways. It earns <em>interchange</em>
+every time a customer spends, and it earns <em>interest</em> whenever a customer carries
+a balance. The trouble is that these two engines are powered by different
+customers: the affluent professional who clears the statement every month is not
+the same person as the revolver paying interest on a near-maxed card. Treat them
+identically and the bank either leaves revenue on the table or pushes credit at
+people who can least afford it.</p>
+<p>This project takes a raw transaction export and turns it into the kind of insight
+that supports those decisions. Working from customer, account and transaction
+records spanning April 2012 to March 2014, I set out to answer seven practical
+questions: What types of customers does the business serve? Who is most valuable?
+Who is at risk of going inactive? What predicts higher spending? Where is the
+money being spent? Can next quarter's volume be forecast? And the question that
+matters most: what should the business actually <em>do</em> about it?</p>
+<p>The report follows the natural arc of that investigation: understand and clean
+the data (sections 2–3), find the customer segments (section 4), predict customer
+value (section 5) and churn risk (section 6), forecast spending (section 7), and
+then pull it all into a concrete set of recommendations (section 8) before being
+honest about the limits of the work (section 9).</p>
+<hr />
+<h2>2. The dataset</h2>
+<p>The raw export contained roughly 156 000 transaction rows and around 1 000
+customers, with the usual real-world rough edges. After cleaning, all of it
+scripted and reproducible via the project's DVC pipeline, I work with a clean
+panel of 155 228 transactions, 996 customers and 24 months of history.</p>
+<table>
+<thead>
+<tr>
+<th></th>
+<th></th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Transactions</td>
+<td>155 228</td>
+</tr>
+<tr>
+<td>Customers</td>
+<td>996</td>
+</tr>
+<tr>
+<td>Transaction window</td>
+<td>1 Apr 2012 – 28 Mar 2014 (~24 months)</td>
+</tr>
+<tr>
+<td>Oldest account opened</td>
+<td>Nov 1988</td>
+</tr>
+<tr>
+<td>Working grains</td>
+<td>transaction-level (raw) → customer-level (one row per client, for modelling)</td>
+</tr>
+</tbody>
+</table>
+<p>Each transaction carries an amount, merchant detail, country and dates; each
+customer carries account attributes (credit limit, card type, relationship),
+balances and payments. All modelling happens at the customer grain: I roll
+transactions up into one row per customer and engineer the behavioural features
+that the business actually reasons about: spending totals, transaction frequency,
+average and peak ticket size, credit utilisation, payment ratio, recency of
+activity, merchant breadth and account age.</p>
+<p><strong>What I cleaned, and why it matters.</strong> Three issues were worth a decision rather
+than a default:</p>
+<ul>
+<li>Dates arrived in Julian <code>YYYYDDD</code> format (e.g. <code>2012092</code>) and were converted to
+  real calendar dates. Without this, every time-based feature would be wrong.</li>
+<li>1 190 rows were byte-for-byte identical across all 22 columns, some repeated up
+  to 14 times. With no genuine transaction key to vouch for them (<code>txn_id</code> turns
+  out to be a coded status field with only 9 distinct values, not an identifier),
+  these are far more consistent with an export glitch than with real repeat
+  purchases, so I dropped them. They were also quietly inflating
+  transaction-frequency features.</li>
+<li>A handful of implausible and sentinel values (3 transactions at or below zero,
+  four customers with a zero credit limit, payment ratios as extreme as −23 715
+  driven by negative balances) were isolated and, where they affect
+  distance-based models, neutralised in section 4.</li>
+</ul>
+<p>Missingness is concentrated in three fields: <code>channel</code> (24.7%), <code>txn_country</code>
+(20.8%) and <code>merchant_group</code> (20.7%). Every feature used for modelling is
+complete.</p>
+<p><strong>A deliberate fairness choice.</strong> The data includes coded <code>gender</code> and <code>race</code>
+fields. I exclude both from every predictive model so that customer-value, churn
+and segmentation decisions are never driven, even implicitly, by demographics.
+They appear only in careful descriptive context. This is revisited in section 9.</p>
+<p><strong>Takeaway.</strong> After cleaning I have a complete, de-duplicated, two-year view of
+996 customers: a trustworthy foundation for the analysis that follows.</p>
+<hr />
+<h2>3. What the data says about customer behaviour</h2>
+<p>Before modelling anything, it pays to look. Four patterns shaped every modelling
+decision downstream.</p>
+<h3>3.1 A small number of transactions move most of the money</h3>
+<p>Spending is extraordinarily top-heavy. The top 1% of transactions account for
+28.9% of total spend, and at the customer level the median customer spends 39 441
+EUR against a mean of 97 665 EUR, dragged up more than twofold by a handful of very
+large customers. The practical consequence is twofold: raw spending figures cannot
+be fed straight into a distance-based model without distorting it (I deal with
+this in section 4), and any targeting strategy should be built around value, not
+transaction counts.</p>
+<h3>3.2 Where customers spend is not where the money is</h3>
+<p><img alt="Merchant value versus volume" src="figures/eda_merchant_value_volume.png" /></p>
+<p>Value and volume live in different merchant categories. Insurance is the single
+largest source of spend (9.15M EUR, or 9.4% of the total) on only about 12 800
+transactions. Petrol is the opposite story: the busiest category by far at 31 907
+transactions, but averaging just 69 EUR a swipe. The lesson for marketing is that
+high-value categories (Insurance, Airlines, Hotels) call for margin and loyalty
+plays, while high-frequency categories (Petrol, Grocery) are where cashback and
+habit-forming offers earn their keep.</p>
+<h3>3.3 Spending is growing, but mind the last month</h3>
+<p><img alt="Monthly spend trend" src="figures/eda_monthly_trend.png" /></p>
+<p>Monthly card spend climbed 29%, from 4.05M EUR in October 2013 to a 5.23M EUR peak
+in January 2014. One caveat is critical: the final month, March 2014, is partial,
+since the data stops on the 28th and the month contains only 3 429 transactions
+against a full-month median of 6 655. Left unaddressed, that truncation would
+manufacture a fake "decline" and inflate any inactivity measure, so I exclude it
+from the forecast (section 7) and treat it carefully in the churn window
+(section 3.5).</p>
+<h3>3.4 One customer in six is carrying a lot of credit</h3>
+<p><img alt="Credit utilisation" src="figures/eda_utilisation.png" /></p>
+<p>Credit utilisation (the share of the limit a customer is using) sits at a
+comfortable median of 0.16, but the tail is long: 16% of customers are above 0.8,
+the conventional high-risk threshold. These customers are simultaneously the
+bank's interest-income engine and its credit exposure, which makes utilisation a
+natural axis for both segmentation and risk monitoring.</p>
+<h3>3.5 Defining churn when there is no churn flag</h3>
+<p>The dataset has no "cancelled" column, so I engineer a business proxy: a customer
+is at risk if they made no transaction in the most recent month of the window.
+That flags 18.5% of customers. Because the final month is partial (section 3.3),
+this should be read as an upper bound, and the window length is a tunable
+parameter. Both points are examined when I model churn in section 6.</p>
+<p><strong>Takeaway.</strong> Spending is concentrated and top-heavy, value and volume are
+decoupled across merchants, the trend is up but truncated at the end, and a
+meaningful minority of customers carry high credit risk. These four facts are the
+reason the segmentation in section 4 looks the way it does.</p>
+<hr />
+<h2>4. Customer segmentation: six groups that need six strategies</h2>
+<h3>4.1 How I built the segments</h3>
+<p>I grouped customers with K-Means on nine financial and behavioural features
+(credit limit, balance, total spend, transaction count, average ticket,
+utilisation, payment ratio, account age and merchant breadth). The skew flagged in
+section 3.1 is not a nuisance here: it is a genuine obstacle. A naive pipeline let
+a few "whale" customers dominate the distance calculations and collapsed
+everything into a meaningless two-cluster <em>whales-versus-everyone</em> split. The fix
+is to winsorise each feature to its 1st–99th percentile, apply a Yeo-Johnson power
+transform to pull in the skew, then reduce to two principal components before
+clustering, which keeps every customer while removing the whale distortion.</p>
+<p><img alt="Silhouette by number of clusters" src="figures/seg_silhouette.png" /></p>
+<p>Searching the number of clusters from 2 to 8, the silhouette score rises to a
+clear peak at k=6 (0.41): a real elbow, not the degenerate k=2 from before. To be
+sure the six groups are a property of the customers and not an artefact of one
+algorithm, I re-ran the same problem with two other methods:</p>
+<table>
+<thead>
+<tr>
+<th>Method</th>
+<th>Silhouette</th>
+<th>Agreement with K-Means (ARI)</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>K-Means (chosen)</td>
+<td>0.41</td>
+<td>—</td>
+</tr>
+<tr>
+<td>Agglomerative (Ward)</td>
+<td>0.32</td>
+<td>0.47</td>
+</tr>
+<tr>
+<td>Gaussian Mixture</td>
+<td>0.31</td>
+<td>0.58</td>
+</tr>
+</tbody>
+</table>
+<p>K-Means gives the cleanest separation and lands on substantially the same
+partition as the probabilistic Gaussian mixture (ARI 0.58), so the structure is
+stable. I keep the simplest, most explainable model.</p>
+<h3>4.2 Meet the six segments</h3>
+<p>Profiles are read off the original, untransformed numbers: the transform is only
+for measuring distance, not for interpretation. The picture below colours each
+segment by how far it sits from the average segment on each feature; the table
+gives the median figures in EUR.</p>
+<p><img alt="Segment profiles" src="figures/seg_profile_heatmap.png" /></p>
+<table>
+<thead>
+<tr>
+<th>Segment</th>
+<th style="text-align: right;">Customers</th>
+<th style="text-align: right;">Share of spend</th>
+<th style="text-align: right;">Median spend (EUR)</th>
+<th style="text-align: right;">Utilisation</th>
+<th style="text-align: center;">Pays off balance?</th>
+<th>In one line</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Affluent Transactors</td>
+<td style="text-align: right;">171 (17%)</td>
+<td style="text-align: right;">36%</td>
+<td style="text-align: right;">148 745</td>
+<td style="text-align: right;">0.03</td>
+<td style="text-align: center;">Yes (0.74)</td>
+<td>Big spenders who clear the balance; pure interchange</td>
+</tr>
+<tr>
+<td>High-Value Whales</td>
+<td style="text-align: right;">60 (6%)</td>
+<td style="text-align: right;">35%</td>
+<td style="text-align: right;">355 192</td>
+<td style="text-align: right;">0.41</td>
+<td style="text-align: center;">Partly</td>
+<td>The top tier; widest merchant range; stickiest</td>
+</tr>
+<tr>
+<td>Engaged Revolvers</td>
+<td style="text-align: right;">189 (19%)</td>
+<td style="text-align: right;">13%</td>
+<td style="text-align: right;">59 673</td>
+<td style="text-align: right;">0.66</td>
+<td style="text-align: center;">No (0.08)</td>
+<td>Active and broad, but carry balances; interest income</td>
+</tr>
+<tr>
+<td>Core Transactors</td>
+<td style="text-align: right;">279 (28%)</td>
+<td style="text-align: right;">11%</td>
+<td style="text-align: right;">33 415</td>
+<td style="text-align: right;">0.03</td>
+<td style="text-align: center;">Mostly</td>
+<td>The mainstream middle of the book</td>
+</tr>
+<tr>
+<td>Credit-Constrained Revolvers</td>
+<td style="text-align: right;">204 (20%)</td>
+<td style="text-align: right;">4%</td>
+<td style="text-align: right;">15 703</td>
+<td style="text-align: right;">0.72</td>
+<td style="text-align: center;">No (0.07)</td>
+<td>Low limits, maxed out, churn-prone (24%)</td>
+</tr>
+<tr>
+<td>Dormant / At-Risk</td>
+<td style="text-align: right;">93 (9%)</td>
+<td style="text-align: right;">0.5%</td>
+<td style="text-align: right;">4 354</td>
+<td style="text-align: right;">0.00</td>
+<td style="text-align: center;">—</td>
+<td>Barely active; 53% already churn-flagged</td>
+</tr>
+</tbody>
+</table>
+<p><img alt="Segments in PCA space" src="figures/seg_pca_map.png" /></p>
+<h3>4.3 Why headcount is the wrong lens</h3>
+<p><img alt="Where the spend lives" src="figures/seg_economic_weight.png" /></p>
+<p>Counting customers badly misleads here. The two most valuable segments, Affluent
+Transactors and High-Value Whales, are just 231 people (23% of the book), yet they
+account for 71% of all spending. At the other end, the two weakest segments
+(Dormant and Credit-Constrained Revolvers) make up 30% of customers but only 4% of
+spend. Any plan that spreads attention evenly across customers is, in effect,
+under-serving the 23% who pay for everything.</p>
+<p><strong>Takeaway.</strong> Six segments, three jobs: <em>protect and grow</em> the top (Whales,
+Affluent Transactors), <em>manage the credit</em> of the revolvers, and <em>spend
+efficiently</em> on the long tail. Section 8 turns this into specific moves.</p>
+<hr />
+<h2>5. Predicting customer value (CLTV)</h2>
+<h3>5.1 What I modelled, and the trap I avoided</h3>
+<p>Following the brief, Customer Lifetime Value is defined as total spend × an assumed
+2% revenue rate. There is a subtle trap here: because CLTV is just a rescaling of
+total spend, handing the model any spend-based feature would let it "predict" the
+answer it was given. I therefore deliberately withhold every spend-arithmetic
+feature (total spend, transaction count, average and peak ticket) and ask a more
+useful question instead: <em>from what the bank knows about an account, how much value
+will this customer generate?</em></p>
+<h3>5.2 Results</h3>
+<p>I compared three models on a held-out 20% of customers.</p>
+<table>
+<thead>
+<tr>
+<th>Model</th>
+<th style="text-align: right;">R²</th>
+<th style="text-align: right;">MAE (CLTV, EUR)</th>
+<th style="text-align: right;">RMSE (CLTV, EUR)</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Linear Regression</td>
+<td style="text-align: right;">0.52</td>
+<td style="text-align: right;">1 496</td>
+<td style="text-align: right;">3 756</td>
+</tr>
+<tr>
+<td>Random Forest</td>
+<td style="text-align: right;">0.56</td>
+<td style="text-align: right;">1 231</td>
+<td style="text-align: right;">3 596</td>
+</tr>
+<tr>
+<td>Gradient Boosting</td>
+<td style="text-align: right;">0.62</td>
+<td style="text-align: right;">1 113</td>
+<td style="text-align: right;">3 337</td>
+</tr>
+</tbody>
+</table>
+<p><img alt="Predicted vs actual CLTV" src="figures/reg_pred_vs_actual.png" /></p>
+<p>Gradient Boosting explains 62% of the variation in customer value using account
+attributes alone: a genuinely useful result given that the most obvious predictors
+were held back on purpose. Linear regression sets a respectable floor at 52%; the
+tree ensembles add the rest by capturing non-linear interactions.</p>
+<p><img alt="What drives predicted value" src="figures/reg_feature_importance.png" /></p>
+<p>The model leans most on monthly payment, merchant breadth, month-end balance and
+account tenure, and notably not on the raw credit limit. In plain terms, how much a
+customer pays each month and how widely they use the card tells us more about their
+value than the limit the bank happened to grant them.</p>
+<p><strong>Takeaway.</strong> The bank can score value potential at the account level, before a
+full spending history accumulates. That is useful for prioritising upgrades and for
+spotting high-limit, low-value accounts ripe for activation. One honest caveat: the
+error is material in monetary terms, so this is a tool for ranking customers, not
+for quoting a number.</p>
+<hr />
+<h2>6. Predicting churn and inactivity risk</h2>
+<h3>6.1 The model, and a second trap avoided</h3>
+<p>Here I predict the section 3.5 churn proxy. The leakage trap is even sharper than
+in section 5: since "churn" is <em>defined</em> by recency of activity, any recency
+feature would hand the model the answer. I exclude <code>recency_days</code> and
+<code>last_txn_date</code> entirely and predict inactivity from spending and account
+behaviour. Because only 18.5% of customers are positive, the models use balanced
+class weights. And here is the key business choice: I judge them primarily on
+recall. Missing a customer who is about to go quiet is expensive; a false alarm
+just means an unnecessary, low-cost retention nudge.</p>
+<h3>6.2 Results: recall first</h3>
+<table>
+<thead>
+<tr>
+<th>Model</th>
+<th style="text-align: right;">Recall</th>
+<th style="text-align: right;">Precision</th>
+<th style="text-align: right;">F1</th>
+<th style="text-align: right;">ROC-AUC</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Logistic Regression</td>
+<td style="text-align: right;">0.89</td>
+<td style="text-align: right;">0.33</td>
+<td style="text-align: right;">0.49</td>
+<td style="text-align: right;">0.79</td>
+</tr>
+<tr>
+<td>Random Forest</td>
+<td style="text-align: right;">0.35</td>
+<td style="text-align: right;">0.72</td>
+<td style="text-align: right;">0.47</td>
+<td style="text-align: right;">0.80</td>
+</tr>
+</tbody>
+</table>
+<p>The two models stake out opposite corners of the same trade-off. Logistic
+Regression catches 89% of churners; Random Forest is more precise but would let
+two-thirds of at-risk customers walk out unnoticed. For a retention use case that
+is the wrong kind of mistake, so I choose Logistic Regression.</p>
+<p><img alt="Confusion matrix" src="figures/clf_confusion.png" /></p>
+<p>On the held-out customers, the chosen model flags 33 of the 37 customers who
+actually churned and misses only 4, at the cost of 66 false alarms. Put in business
+terms: chase every name on this list and you reach almost everyone who was
+genuinely leaving, while the "wasted" outreach lands on customers who are cheap to
+contact anyway.</p>
+<p><img alt="ROC curve" src="figures/clf_roc.png" /></p>
+<p>The decision threshold is a dial the business can turn: a cheap email campaign can
+afford to cast wide (high recall), while an expensive concierge call should be
+aimed more precisely. The single strongest predictor, by a wide margin, is low
+transaction frequency: infrequent users are the ones who lapse, exactly the
+behaviour that defines the <em>Dormant / At-Risk</em> segment from section 4.</p>
+<p><strong>Takeaway.</strong> A deliberately recall-tuned model gives the bank a reliable
+early-warning list of who is going quiet, and section 8 explains how to act on it
+without overspending.</p>
+<hr />
+<h2>7. Forecasting monthly spend</h2>
+<h3>7.1 Approach</h3>
+<p>I aggregated the ledger into a monthly total-spend series, trimmed the partial
+March-2014 month (section 3.3) to leave 23 clean months, held out the last three
+for testing, and compared a moving-average baseline against ARIMA.</p>
+<table>
+<thead>
+<tr>
+<th>Method</th>
+<th style="text-align: right;">MAPE</th>
+<th style="text-align: right;">RMSE (EUR)</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Moving average</td>
+<td style="text-align: right;">12.8%</td>
+<td style="text-align: right;">780K</td>
+</tr>
+<tr>
+<td>ARIMA(1 1 1)</td>
+<td style="text-align: right;">13.2%</td>
+<td style="text-align: right;">844K</td>
+</tr>
+</tbody>
+</table>
+<h3>7.2 The forecast</h3>
+<p><img alt="Monthly spend forecast" src="figures/fc_forecast.png" /></p>
+<p>On a short, essentially flat series the moving-average baseline narrowly beats
+ARIMA: a healthy reminder that sophistication is not the same as accuracy when
+there is no strong trend or seasonality to exploit. The forecast holds portfolio
+spend near 4.6M EUR per month over the next quarter, within a roughly ±13% band.</p>
+<p><strong>Takeaway.</strong> For short-horizon planning the business can budget on a flat ~4.6M EUR
+monthly run-rate. This is a planning baseline rather than a precision instrument;
+the wide band reflects real month-to-month volatility and the short history, and
+with more data a seasonal model should be revisited to capture holiday peaks like
+the January spike.</p>
+<hr />
+<h2>8. Recommendations: what the business should do</h2>
+<p>The threads above converge on one principle, manage by value at risk, not by
+headcount, and on a short list of concrete moves, ordered by the revenue they
+protect or create.</p>
+<p><strong>1. Ring-fence the top 23%.</strong> Affluent Transactors and High-Value Whales are 231
+customers carrying 71% of spend. Put the Whales on dedicated relationship
+management with premium rewards and proactive retention: losing one is the spend
+equivalent of losing nine median customers. Grow the Affluent Transactors' wallet
+share with premium-card upgrades and travel/lifestyle perks; they carry almost no
+credit risk, so the only question is how to make them spend more with us.</p>
+<p><strong>2. Run the revolvers as a managed credit business.</strong> Engaged Revolvers (19% of
+customers, carrying real balances) are the interest-income engine: offer
+responsible credit-line increases to reliable payers while watching delinquency.
+Credit-Constrained Revolvers, by contrast, are maxed out on small limits with 24%
+churn risk and only 4% of spend; serve them cheaply, review limits only where
+creditworthiness supports it, and do not chase growth here.</p>
+<p><strong>3. Make retention a targeted, two-tier programme.</strong> Feed the section 6 churn
+model's high-probability list into retention, but split it by value: automated,
+low-cost win-back for the long tail of Dormant accounts (0.5% of spend, so do not
+overspend), and personal outreach reserved for high-CLTV names where the section 5
+value score says real revenue is at stake. This is how a 33-of-37 recall rate turns
+into protected revenue rather than wasted budget.</p>
+<p><strong>4. Tailor merchant offers to the value-vs-volume split.</strong> Use margin and loyalty
+plays in high-value categories (Insurance, Airlines, Hotels) and frequency-building
+cashback in high-volume ones (Petrol, Grocery).</p>
+<p><strong>5. Plan on a flat run-rate, and watch utilisation.</strong> Budget marketing and
+operations against ~4.6M EUR monthly spend, and keep a standing eye on the 16% of
+customers above 0.8 utilisation as both a revenue and a risk signal.</p>
+<hr />
+<h2>9. Limitations and ethics</h2>
+<p>Several caveats bound how far these results should be pushed.</p>
+<ul>
+<li><strong>Currency is an assumption.</strong> The data does not label its currency; I report
+  amounts as euros, but this is an assumption, so absolute values should be read
+  with care.</li>
+<li><strong>CLTV is a derived target.</strong> Because it is defined as spend × 2%, the regression
+  is ultimately predicting spend in disguise; the revenue rate is an assumption,
+  and a more realistic CLTV would blend interchange, interest and tenure. The model
+  is best used for ranking, not point estimates.</li>
+<li><strong>The churn label is a proxy.</strong> It is built on a one-month inactivity window that
+  sits partly on a truncated final month, so the 18.5% rate is an upper bound and
+  the window is a parameter, not a ground truth.</li>
+<li><strong>Forecasting rests on limited history.</strong> With only ~2 years of data there is no
+  room to fit seasonality properly; the flat ±13% outlook should be refreshed as
+  history grows.</li>
+<li><strong>Coded fields are undocumented.</strong> <code>gender</code>, numeric <code>race</code> and high-cardinality
+  card and merchant codes are used as opaque levels.</li>
+<li><strong>Sample size is modest.</strong> With 996 customers, segment-level figures carry real
+  sampling uncertainty.</li>
+<li><strong>Ethics.</strong> I deliberately excluded <code>race</code> and <code>gender</code> from every predictive
+  model to avoid encoding demographic bias into value, churn or segmentation
+  decisions. High-utilisation and credit-line recommendations should be applied
+  with responsible-lending safeguards, not used to push credit at financially
+  stretched customers.</li>
+</ul>
+<hr />
+<h2>10. Conclusion</h2>
+<p>Two years of transactions, once cleaned and reframed around the business, tell a
+clear story. The portfolio is not a uniform mass of customers but six distinct
+groups, and its economics are dominated by a small, high-value minority: 23% of
+customers, 71% of spend. I can estimate customer value from account behaviour well
+enough to rank who deserves investment (R² 0.62), catch 89% of customers going
+quiet in time to intervene, and plan on a steady ~4.6M EUR monthly run-rate for the
+quarter ahead.</p>
+<p>The through-line of every recommendation is the same: stop treating customers as
+interchangeable. Protect the value concentrated at the top, run the revolvers as a
+deliberate credit business, and spend retention budget where revenue is genuinely
+at risk. Do that, and the analysis stops being a description of the past and starts
+being a lever on the bank's future revenue.</p>
+<hr />
+<h2>Appendix: reproducibility with DVC and MLflow</h2>
+<p>Beyond the analysis itself, the project is built on two MLOps tools, DVC and
+MLflow, so that every result can be reproduced from the raw data and every
+modelling experiment is recorded. The idea to layer them on top of the
+coursework comes from the MLOps course; together they turn a collection of
+notebooks into a versioned, auditable pipeline.</p>
+<h3>DVC: versioned data and a one-command pipeline</h3>
+<p>DVC (Data Version Control) sits next to git and handles the two things git is bad
+at: large data files and multi-step pipelines. Git keeps the code, while DVC
+keeps the heavy or sensitive artefacts (the raw dataset, the cleaned tables, the
+trained models) outside git and records only a small pointer to them. That is why
+the raw <code>data.csv</code> is git-ignored but DVC-tracked: the dataset is never committed,
+yet anyone with access can restore the exact version the analysis used.</p>
+<p>The pipeline is declared in <code>dvc.yaml</code> as seven stages: <code>clean</code> to <code>features</code>,
+then one stage for each of the four models. Every stage lists its dependencies
+(the script and its input files), its parameters (read from <code>params.yaml</code>, the
+single source of truth for every setting), its outputs, and its metrics. Because
+DVC knows this dependency graph, <code>dvc repro</code> re-runs only the stages whose inputs
+actually changed. Adjusting, say, the churn window in <code>params.yaml</code> re-runs the
+affected stages and leaves the rest cached, and the whole analysis rebuilds from
+raw data with a single command. The result is a clear data lineage and a workflow
+that is reproducible rather than a sequence of manual steps.</p>
+<h3>MLflow: tracking and comparing experiments</h3>
+<p>MLflow records what each modelling run actually did. Every model stage opens an
+MLflow run tagged with its track (segmentation, regression, classification or
+forecasting) and logs three things: the parameters used (for example the cluster
+search range, the revenue rate, or the feature list), the resulting metrics
+(silhouette, R², recall, MAPE), and the fitted model itself. Runs are written to
+a local <code>mlruns/</code> store; launching <code>mlflow ui</code> opens a dashboard where runs can be
+filtered by track and compared side by side. The project currently holds nine
+logged runs across the four tracks, which is what makes statements like "Gradient
+Boosting beat the linear baseline" or "this k scored highest" auditable rather
+than asserted.</p>
+<h3>How they fit together, and where to look</h3>
+<p>DVC guarantees that the data and pipeline are versioned and reproducible; MLflow
+records what each run produced so that modelling results stay comparable and
+traceable. One builds the artefacts, the other explains how they came to be.</p>
+<ul>
+<li><strong>Cleaning and features:</strong> <code>src/data/clean.py</code>, <code>src/data/features.py</code> (DVC stages <code>clean</code>, <code>features</code>).</li>
+<li><strong>Models:</strong> <code>src/models/train_segmentation.py</code>, <code>train_regression.py</code>, <code>train_classification.py</code>, <code>train_forecasting.py</code> (one DVC stage each; metrics in <code>metrics/</code>, runs logged to MLflow).</li>
+<li><strong>Notebooks:</strong> <code>01_eda</code> · <code>02_segmentation</code> · <code>03_regression</code> · <code>04_classification</code> · <code>05_forecasting</code> (all executed).</li>
+<li><strong>Figures:</strong> regenerated by <code>scripts/build_report_figures.py</code> from the pipeline outputs.</li>
+<li><strong>Reproduce everything:</strong> <code>dvc repro</code> rebuilds the pipeline; <code>mlflow ui</code> opens the experiment dashboard.</li>
+</ul></body></html>
